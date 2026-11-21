@@ -38,6 +38,8 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;b
 .sheet{background:#fff;width:100%;max-width:760px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
 #receipt{font-family:monospace;font-size:14px;border:1px dashed #94a3b8;padding:12px;border-radius:8px;white-space:pre-wrap}
 .login{max-width:380px;margin:60px auto}
+.scanrow{display:flex;gap:6px;align-items:center}.scanrow input,.scanrow select{flex:1}.scanrow .btn{margin:0;flex:0 0 auto}
+#scanbox video,#scanbox>div{width:100%;border-radius:10px;background:#000}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:20px;display:none;z-index:30}
 @media print{body *{visibility:hidden}#receipt,#receipt *{visibility:visible}#receipt{position:absolute;left:0;top:0;border:0;width:80mm}}
 </style>
@@ -49,7 +51,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;b
 <script>
 // ---------- Data ----------
 const KEY='mobileShopDB_v1';
-let db=load();
+let db=load();if(db&&!db.models)db.models={};
 let role=null, tab='home';
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('Save nahi hua: '+e.message)}}
@@ -111,7 +113,7 @@ function doSetup(){
   if(!val('s_shop')||!val('s_op')||!val('s_sp'))return alert('Naam, Malik PIN aur Staff PIN zaroori hain');
   if(val('s_op')===val('s_sp'))return alert('Malik aur Staff ka PIN alag rakhein');
   db={settings:{shop:val('s_shop'),phone:val('s_phone'),address:val('s_addr'),ownerPin:val('s_op'),staffPin:val('s_sp'),defaultPercent:20,defaultFine:0},
-      accessories:[],mobiles:[],customers:[],plans:[],sales:[]};
+      accessories:[],mobiles:[],models:{},customers:[],plans:[],sales:[]};
   save();role='owner';render();
 }
 function renderLogin(){
@@ -150,7 +152,7 @@ views.sale=()=>{
    <label>Accessory</label><select id="c_acc"><option value="">-- chunein --</option>${opts}</select>
    <div class="row"><div><label>Tadaad</label><input id="c_qty" type="number" value="1"></div><div><label>Qeemat (har ek)</label><input id="c_pr" type="number" placeholder="khali = stock wali"></div></div>
    <button class="btn sec" onclick="addCart()">+ Add</button>
-   <label>Ya mobile cash par</label><select id="c_mob"><option value="">-- chunein --</option>${mob}</select>
+   <label>Ya mobile cash par</label><div class="scanrow"><select id="c_mob"><option value="">-- chunein --</option>${mob}</select><button class="btn sec" onclick="scan(v=>pickImei('c_mob',v))">📷</button></div>
    <button class="btn sec" onclick="addCartMob()">+ Mobile add</button>
    <h3>Bill</h3>${cart.length?`<table>${cart.map((c,i)=>`<tr><td>${esc(c.name)}</td><td>${c.qty} x ${rs(c.price)}</td><td>${rs(c.qty*c.price)}</td><td><button class="btn red sm" onclick="cart.splice(${i},1);views.sale()">x</button></td></tr>`).join('')}</table>`:'<p class="muted">Abhi khali hai</p>'}
    <div class="row"><div><label>Discount (Rs)</label><input id="c_disc" type="number" value="0"></div><div><label>Customer phone (WhatsApp ke liye)</label><input id="c_ph" inputmode="tel"></div></div>
@@ -174,7 +176,7 @@ views.qist=()=>{
   $('main').innerHTML=`<div class="card"><h2>Mobile qist par dein</h2>
    <label>Customer</label><select id="q_c" onchange="$('newc').style.display=this.value?'none':'block'"><option value="">+ Naya customer</option>${custs}</select>
    <div id="newc">${custForm('q')}</div>
-   <h3>Mobile</h3><select id="q_m" onchange="qFill()"><option value="">-- stock se chunein --</option>${mob}</select>
+   <h3>Mobile</h3><div class="scanrow"><select id="q_m" onchange="qFill()"><option value="">-- stock se chunein --</option>${mob}</select><button class="btn sec" onclick="scan(v=>{pickImei('q_m',v);qFill()})">📷 IMEI</button></div>
    <div class="row"><div><label>Cash qeemat</label><input id="q_cash" type="number" oninput="qCalc()"></div><div><label>Munafa %</label><input id="q_pct" type="number" value="${db.settings.defaultPercent}" oninput="qCalc()"></div></div>
    <div class="row"><div><label>Advance</label><input id="q_adv" type="number" value="0" oninput="qCalc()"></div><div><label>Kitne mahine</label><input id="q_mon" type="number" value="6" oninput="qCalc()"></div></div>
    <label>Pehli qist ki tareekh</label><input id="q_start" type="date" value="${addMonths(today(),1)}">
@@ -247,10 +249,18 @@ function delPlan(pid){if(!confirm('Poora account delete? Wapas nahi aaye ga'))re
 function delCust(cid){if(db.plans.some(p=>p.customerId===cid))return alert('Pehle is ke accounts delete karein');if(!confirm('Customer delete karein?'))return;db.customers=db.customers.filter(c=>c.id!==cid);save();closeM();render()}
 
 // Stock
+let mf={};
 views.stock=()=>{
   const o=isOwner();
   $('main').innerHTML=`${o?`<div class="card"><h2>Accessory add karein</h2><label>Naam</label><input id="a_n" placeholder="Jaise: Type-C charger"><div class="row"><div><label>Tadaad</label><input id="a_q" type="number"></div><div><label>Khareed qeemat</label><input id="a_c" type="number"></div><div><label>Bechne ki qeemat</label><input id="a_p" type="number"></div></div><button class="btn" onclick="addAcc()">Add</button></div>
-  <div class="card"><h2>Mobile stock mein add</h2><div class="row"><div><label>Model</label><input id="m_m" placeholder="Jaise: Infinix Hot 40"></div><div><label>IMEI</label><input id="m_i" inputmode="numeric"></div></div><div class="row"><div><label>Khareed qeemat</label><input id="m_c" type="number"></div><div><label>Cash qeemat</label><input id="m_p" type="number"></div></div><button class="btn" onclick="addMob()">Add</button></div>`:''}
+  <div class="card"><h2>Mobile stock mein add</h2>
+  <label>Dabbe ka barcode (EAN) — scan karein</label><div class="scanrow"><input id="m_e" inputmode="numeric" value="${esc(mf.e)}" onchange="eanLookup()" onkeydown="if(event.key==='Enter'){eanLookup();$('m_i').focus()}"><button class="btn sec" onclick="scan(v=>{$('m_e').value=v;eanLookup()})">📷 Scan</button></div>
+  <p class="muted" id="m_info"></p>
+  <label>Model (RAM/storage/colour ke saath)</label><input id="m_m" value="${esc(mf.m)}" placeholder="Jaise: Tecno Spark 10 8/128 Black">
+  <label>IMEI — scan karein</label><div class="scanrow"><input id="m_i" inputmode="numeric" onkeydown="if(event.key==='Enter')addMob()"><button class="btn sec" onclick="scan(v=>{$('m_i').value=v},true)">📷 Scan</button></div>
+  <div class="row"><div><label>Khareed qeemat</label><input id="m_c" type="number" value="${mf.c||''}"></div><div><label>Cash qeemat</label><input id="m_p" type="number" value="${mf.p||''}"></div></div>
+  <button class="btn" onclick="addMob()">Add</button> <button class="btn sec" onclick="mf={};views.stock()">Form saaf</button>
+  <p class="muted">Ek hi model ke kai mobile: Add ke baad sirf agla IMEI scan karte jayein.</p></div>`:''}
   <div class="card"><h2>Accessories</h2>${db.accessories.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><br><span class="muted">${rs(a.price)}${o?' · khareed '+rs(a.cost):''}</span></div><div><span class="tag ${a.qty<=3?'late':''}">${a.qty}</span>${o?` <button class="btn sec sm" onclick="editAcc('${a.id}')">+/-</button><button class="btn red sm" onclick="delAcc('${a.id}')">x</button>`:''}</div></div>`).join('')||'<p class="muted">Khali</p>'}</div>
   <div class="card"><h2>Mobiles (stock mein)</h2>${db.mobiles.filter(m=>m.status==='stock').map(m=>`<div class="item"><div><b>${esc(m.model)}</b><br><span class="muted">IMEI ${esc(m.imei)} · ${rs(m.price)}${o?' · khareed '+rs(m.cost):''}</span></div>${o?`<button class="btn red sm" onclick="delMob('${m.id}')">x</button>`:''}</div>`).join('')||'<p class="muted">Khali</p>'}
   <h3>Bik chuke</h3>${db.mobiles.filter(m=>m.status==='sold').slice(-20).reverse().map(m=>`<div class="item muted">${esc(m.model)} · ${esc(m.imei)} → ${esc(m.soldTo)}</div>`).join('')||'<p class="muted">Koi nahi</p>'}</div>`;
@@ -258,7 +268,11 @@ views.stock=()=>{
 function addAcc(){if(!val('a_n'))return alert('Naam likhein');const ex=db.accessories.find(a=>a.name.toLowerCase()===val('a_n').toLowerCase());if(ex){ex.qty+=num('a_q');if(num('a_c'))ex.cost=num('a_c');if(num('a_p'))ex.price=num('a_p')}else db.accessories.push({id:uid(),name:val('a_n'),qty:num('a_q'),cost:num('a_c'),price:num('a_p')});save();toast('Add ho gaya');views.stock()}
 function editAcc(id){const a=db.accessories.find(x=>x.id===id);const n=prompt(a.name+' — kitne add karein? (kam karne ke liye minus likhein, jaise -2)','');if(n===null)return;a.qty=Math.max(0,a.qty+(parseInt(n)||0));save();views.stock()}
 function delAcc(id){if(confirm('Delete karein?')){db.accessories=db.accessories.filter(a=>a.id!==id);save();views.stock()}}
-function addMob(){if(!val('m_m')||!val('m_i'))return alert('Model aur IMEI zaroori hain');if(db.mobiles.some(m=>m.imei===val('m_i')))return alert('Ye IMEI pehle se hai');db.mobiles.push({id:uid(),model:val('m_m'),imei:val('m_i'),cost:num('m_c'),price:num('m_p'),status:'stock',added:today()});save();toast('Add ho gaya');views.stock()}
+function eanLookup(){const e=val('m_e');const m=db.models[e];if(e&&m){$('m_m').value=m.name;if(m.cost)$('m_c').value=m.cost;if(m.price)$('m_p').value=m.price;$('m_info').textContent='✔ Pehchana gaya: '+m.name}else if(e){$('m_info').textContent='Naya barcode — model ka naam likhein, agli dafa khud aa jaye ga';$('m_m').focus()}}
+function addMob(){const imei=val('m_i').replace(/\D/g,''),model=val('m_m'),ean=val('m_e');if(!model||!imei)return alert('Model aur IMEI zaroori hain');if(imei.length!==15&&!confirm('IMEI 15 number ka hota hai, ye '+imei.length+' ka hai. Phir bhi save karein?'))return;if(db.mobiles.some(m=>m.imei===imei))return alert('Ye IMEI pehle se stock mein hai');
+ db.mobiles.push({id:uid(),model,imei,ean,cost:num('m_c'),price:num('m_p'),status:'stock',added:today()});if(ean)db.models[ean]={name:model,cost:num('m_c'),price:num('m_p')};
+ mf={e:ean,m:model,c:num('m_c'),p:num('m_p')};save();toast('Add ho gaya: '+imei);views.stock();setTimeout(()=>$('m_i').focus(),50)}
+function pickImei(sel,v){v=(v||'').replace(/\D/g,'');const m=db.mobiles.find(x=>x.status==='stock'&&x.imei===v);if(!m)return alert('Ye IMEI stock mein nahi mila: '+v);$(sel).value=m.id;toast(m.model)}
 function delMob(id){if(confirm('Delete karein?')){db.mobiles=db.mobiles.filter(m=>m.id!==id);save();views.stock()}}
 
 // Reports (owner)
@@ -326,8 +340,27 @@ function showReceipt(text,phone){
   window._rt=text;$('modal').classList.add('show');
 }
 function sendWa(){const n=waNum(val('wa_n'));window.open('https://wa.me/'+n+'?text='+encodeURIComponent(window._rt),'_blank')}
+// ---------- Barcode scan ----------
+let scanStream=null,scanLib=null;
+async function scan(cb,imeiOnly){
+  $('sheet').innerHTML=`<h2>Barcode scan</h2><p class="muted">Barcode ko camera ke saamne seedha rakhein</p><div id="scanbox"><video id="sv" playsinline muted></video></div><button class="btn sec full" onclick="stopScan()">Band karein</button>`;
+  $('modal').classList.add('show');
+  const done=v=>{if(!scanStream&&!scanLib&&!('BarcodeDetector' in window&&$('sv')))return true;v=String(v).trim();if(imeiOnly){const d=v.replace(/\D/g,'');if(d.length!==15)return false;v=d}stopScan();if(navigator.vibrate)navigator.vibrate(80);cb(v);return true};
+  try{
+    if('BarcodeDetector' in window){
+      const det=new BarcodeDetector();scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      const v=$('sv');v.srcObject=scanStream;await v.play();
+      const loop=async()=>{if(!scanStream)return;try{const r=await det.detect(v);for(const b of r){if(done(b.rawValue))return}}catch(e){}requestAnimationFrame(loop)};loop();
+    }else{
+      $('scanbox').innerHTML='<div id="sr"></div>';
+      if(!window.Html5Qrcode)await new Promise((ok,no)=>{const t=document.createElement('script');t.src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';t.onload=ok;t.onerror=no;document.head.appendChild(t)});
+      scanLib=new Html5Qrcode('sr');await scanLib.start({facingMode:'environment'},{fps:10,qrbox:{width:280,height:120}},t=>done(t));
+    }
+  }catch(e){$('scanbox').innerHTML='<p class="muted">Camera nahi khula. Camera ki permission dein, ya number haath se / scanner machine se likhein.</p>'}
+}
+function stopScan(){if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}if(scanLib){scanLib.stop().catch(()=>{});scanLib=null}closeM()}
 function closeM(){$('modal').classList.remove('show')}
-$('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal'){if(scanStream||scanLib)stopScan();else closeM()}});
 render();
 </script>
 </body>

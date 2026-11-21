@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Shop & Qistain</title>
+<meta name="theme-color" content="#0f766e">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;color:#0f172a;font-size:16px}
+header{background:#0f766e;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header b{font-size:18px}
+header small{opacity:.85}
+nav{display:flex;overflow-x:auto;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:52px;z-index:4}
+nav button{flex:0 0 auto;border:0;background:none;padding:12px 14px;font-size:15px;color:#475569;border-bottom:3px solid transparent}
+nav button.on{color:#0f766e;border-color:#0f766e;font-weight:600}
+main{padding:12px;max-width:760px;margin:auto}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px #0001}
+h2{font-size:17px;margin:0 0 10px}
+h3{font-size:15px;margin:12px 0 6px;color:#334155}
+label{display:block;font-size:13px;color:#475569;margin:8px 0 3px}
+input,select,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;background:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.btn{display:inline-block;border:0;border-radius:8px;padding:11px 14px;font-size:15px;background:#0f766e;color:#fff;margin:4px 4px 0 0;cursor:pointer}
+.btn.sec{background:#e2e8f0;color:#0f172a}.btn.red{background:#dc2626}.btn.wa{background:#16a34a}.btn.sm{padding:6px 10px;font-size:13px}
+.full{width:100%}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:#f8fafc;border-radius:10px;padding:10px}
+.stat span{display:block;font-size:12px;color:#64748b}.stat b{font-size:18px}
+.item{border-top:1px solid #e2e8f0;padding:10px 0;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.item:first-child{border-top:0}
+.muted{color:#64748b;font-size:13px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;background:#e2e8f0}
+.tag.late{background:#fee2e2;color:#b91c1c}.tag.due{background:#fef3c7;color:#92400e}.tag.ok{background:#dcfce7;color:#166534}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;border-bottom:1px solid #e2e8f0;text-align:left}
+.modal{position:fixed;inset:0;background:#0007;display:none;align-items:flex-end;justify-content:center;z-index:20}
+.modal.show{display:flex}
+.sheet{background:#fff;width:100%;max-width:760px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px}
+#receipt{font-family:monospace;font-size:14px;border:1px dashed #94a3b8;padding:12px;border-radius:8px;white-space:pre-wrap}
+.login{max-width:380px;margin:60px auto}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:20px;display:none;z-index:30}
+@media print{body *{visibility:hidden}#receipt,#receipt *{visibility:visible}#receipt{position:absolute;left:0;top:0;border:0;width:80mm}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+// ---------- Data ----------
+const KEY='mobileShopDB_v1';
+let db=load();
+let role=null, tab='home';
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('Save nahi hua: '+e.message)}}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function today(){const d=new Date();return d.toISOString().slice(0,10)}
+function rs(n){return 'Rs '+Math.round(+n||0).toLocaleString('en-PK')}
+function fmtD(s){if(!s)return'';const[y,m,d]=s.split('-');return d+'-'+m+'-'+y}
+function addMonths(s,k){const d=new Date(s+'T00:00:00');const day=d.getDate();d.setMonth(d.getMonth()+k);if(d.getDate()!==day)d.setDate(0);return d.toISOString().slice(0,10)}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function $(id){return document.getElementById(id)}
+function val(id){return ($(id)?.value||'').trim()}
+function num(id){return parseFloat(val(id))||0}
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2200)}
+const isOwner=()=>role==='owner';
+function cust(id){return db.customers.find(c=>c.id===id)}
+
+// ---------- Plan helpers ----------
+function makeSchedule(amount,months,start){
+  const per=Math.ceil(amount/months/10)*10; const s=[]; let left=amount;
+  for(let i=0;i<months;i++){const a=i===months-1?left:Math.min(per,left);s.push({no:i+1,due:addMonths(start,i),amount:a,paid:0});left-=a}
+  return s.filter(x=>x.amount>0);
+}
+function applyPayment(p,amt){let left=amt;for(const s of p.schedule){if(left<=0)break;const need=s.amount-s.paid;if(need>0){const t=Math.min(need,left);s.paid+=t;left-=t}}return left}
+function remaining(p){return p.schedule.reduce((a,s)=>a+(s.amount-s.paid),0)}
+function paidTotal(p){return p.advance+p.payments.reduce((a,x)=>a+x.amount,0)+(p.openingPaid||0)}
+function status(p){
+  const t=today();const rem=remaining(p);
+  if(rem<=0)return{c:'ok',t:'Mukammal'};
+  const late=p.schedule.filter(s=>s.paid<s.amount&&s.due<t);
+  if(late.length)return{c:'late',t:late.length+' qist late',lateAmt:late.reduce((a,s)=>a+s.amount-s.paid,0),days:Math.floor((new Date(t)-new Date(late[0].due))/864e5)};
+  const nx=p.schedule.find(s=>s.paid<s.amount);
+  if(nx&&nx.due===t)return{c:'due',t:'Aaj due'};
+  return{c:'',t:'Agli: '+fmtD(nx?.due)};
+}
+function nextDue(p){return p.schedule.find(s=>s.paid<s.amount)}
+
+// ---------- Setup / Login ----------
+function render(){
+  if(!db){return renderSetup()}
+  if(!role){return renderLogin()}
+  const tabs=[['home','Home'],['sale','Accessories Sale'],['qist','Qist par Mobile'],['wasooli','Qist Wasooli'],['customers','Customers'],['stock','Stock']];
+  if(isOwner())tabs.push(['reports','Reports'],['old','Purana Record'],['settings','Settings']);
+  $('app').innerHTML=`<header><div><b>${esc(db.settings.shop)}</b><br><small>${isOwner()?'Malik':'Staff'} login</small></div><button class="btn sec sm" onclick="logout()">Logout</button></header>
+  <nav>${tabs.map(([k,n])=>`<button class="${tab===k?'on':''}" onclick="go('${k}')">${n}</button>`).join('')}</nav><main id="main"></main>`;
+  (views[tab]||views.home)();
+}
+function go(t){tab=t;render();scrollTo(0,0)}
+function logout(){role=null;render()}
+function renderSetup(){
+  $('app').innerHTML=`<div class="login card"><h2>Pehli dafa setup</h2>
+  <label>Dukaan ka naam</label><input id="s_shop" placeholder="Jaise: Ali Mobile Zone">
+  <label>Phone number</label><input id="s_phone" inputmode="tel">
+  <label>Pata (address)</label><input id="s_addr">
+  <label>Malik PIN (sirf aap)</label><input id="s_op" type="password" inputmode="numeric">
+  <label>Staff PIN</label><input id="s_sp" type="password" inputmode="numeric">
+  <button class="btn full" onclick="doSetup()">Shuru karein</button></div>`;
+}
+function doSetup(){
+  if(!val('s_shop')||!val('s_op')||!val('s_sp'))return alert('Naam, Malik PIN aur Staff PIN zaroori hain');
+  if(val('s_op')===val('s_sp'))return alert('Malik aur Staff ka PIN alag rakhein');
+  db={settings:{shop:val('s_shop'),phone:val('s_phone'),address:val('s_addr'),ownerPin:val('s_op'),staffPin:val('s_sp'),defaultPercent:20,defaultFine:0},
+      accessories:[],mobiles:[],customers:[],plans:[],sales:[]};
+  save();role='owner';render();
+}
+function renderLogin(){
+  $('app').innerHTML=`<div class="login card"><h2>${esc(db.settings.shop)}</h2>
+  <label>PIN likhein</label><input id="pin" type="password" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()">
+  <button class="btn full" onclick="doLogin()">Login</button></div>`;
+  setTimeout(()=>$('pin')?.focus(),50);
+}
+function doLogin(){const p=val('pin');if(p===db.settings.ownerPin)role='owner';else if(p===db.settings.staffPin)role='staff';else return alert('PIN ghalat hai');tab='home';render()}
+
+// ---------- Views ----------
+const views={};
+views.home=()=>{
+  const t=today();const active=db.plans.filter(p=>remaining(p)>0);
+  const late=active.filter(p=>status(p).c==='late');
+  const dueToday=active.filter(p=>status(p).c==='due');
+  const todayColl=db.plans.reduce((a,p)=>a+p.payments.filter(x=>x.date===t).reduce((b,x)=>b+x.amount+(x.fine||0),0),0);
+  const todaySale=db.sales.filter(s=>s.date===t).reduce((a,s)=>a+s.total,0);
+  const list=(arr)=>arr.length?arr.map(p=>{const c=cust(p.customerId),st=status(p),nx=nextDue(p);return`<div class="item"><div><b>${esc(c?.name)}</b> <span class="tag ${st.c}">${st.t}</span><br><span class="muted">${esc(p.item)} · ${esc(c?.phone)}${st.lateAmt?' · baqi '+rs(st.lateAmt):' · qist '+rs(nx?.amount-nx?.paid)}</span></div><button class="btn sm" onclick="openPay('${p.id}')">Wasool</button></div>`}).join(''):'<p class="muted">Koi nahi</p>';
+  $('main').innerHTML=`<div class="card"><div class="stats">
+   <div class="stat"><span>Aaj ki wasooli</span><b>${rs(todayColl)}</b></div>
+   <div class="stat"><span>Aaj ki cash sale</span><b>${rs(todaySale)}</b></div>
+   <div class="stat"><span>Aaj due</span><b>${dueToday.length}</b></div>
+   <div class="stat"><span>Late customers</span><b style="color:#dc2626">${late.length}</b></div></div></div>
+   <div class="card"><h2>Aaj due qistain</h2>${list(dueToday)}</div>
+   <div class="card"><h2>Late qistain</h2>${list(late.sort((a,b)=>status(b).days-status(a).days))}</div>`;
+};
+
+// Accessories sale
+let cart=[];
+views.sale=()=>{
+  const opts=db.accessories.filter(a=>a.qty>0).map(a=>`<option value="${a.id}">${esc(a.name)} (${a.qty}) - ${rs(a.price)}</option>`).join('');
+  const mob=db.mobiles.filter(m=>m.status==='stock').map(m=>`<option value="${m.id}">${esc(m.model)} · ${esc(m.imei)} - ${rs(m.price)}</option>`).join('');
+  const total=cart.reduce((a,c)=>a+c.price*c.qty,0);
+  $('main').innerHTML=`<div class="card"><h2>Cash sale</h2>
+   <label>Accessory</label><select id="c_acc"><option value="">-- chunein --</option>${opts}</select>
+   <div class="row"><div><label>Tadaad</label><input id="c_qty" type="number" value="1"></div><div><label>Qeemat (har ek)</label><input id="c_pr" type="number" placeholder="khali = stock wali"></div></div>
+   <button class="btn sec" onclick="addCart()">+ Add</button>
+   <label>Ya mobile cash par</label><select id="c_mob"><option value="">-- chunein --</option>${mob}</select>
+   <button class="btn sec" onclick="addCartMob()">+ Mobile add</button>
+   <h3>Bill</h3>${cart.length?`<table>${cart.map((c,i)=>`<tr><td>${esc(c.name)}</td><td>${c.qty} x ${rs(c.price)}</td><td>${rs(c.qty*c.price)}</td><td><button class="btn red sm" onclick="cart.splice(${i},1);views.sale()">x</button></td></tr>`).join('')}</table>`:'<p class="muted">Abhi khali hai</p>'}
+   <div class="row"><div><label>Discount (Rs)</label><input id="c_disc" type="number" value="0"></div><div><label>Customer phone (WhatsApp ke liye)</label><input id="c_ph" inputmode="tel"></div></div>
+   <h3>Total: ${rs(total)}</h3><button class="btn full" onclick="finishSale()">Sale mukammal karein</button></div>
+   <div class="card"><h2>Aaj ki sales</h2>${db.sales.filter(s=>s.date===today()).reverse().map(s=>`<div class="item"><div>${s.items.map(i=>esc(i.name)).join(', ')}<br><span class="muted">${esc(s.by)}</span></div><div><b>${rs(s.total)}</b> <button class="btn sec sm" onclick="saleReceipt('${s.id}')">Receipt</button></div></div>`).join('')||'<p class="muted">Koi nahi</p>'}</div>`;
+};
+function addCart(){const a=db.accessories.find(x=>x.id===val('c_acc'));if(!a)return alert('Accessory chunein');const q=Math.max(1,num('c_qty'));const inCart=cart.filter(c=>c.accId===a.id).reduce((s,c)=>s+c.qty,0);if(q+inCart>a.qty)return alert('Stock mein sirf '+a.qty+' hain');cart.push({accId:a.id,name:a.name,qty:q,price:num('c_pr')||a.price,cost:a.cost||0});views.sale()}
+function addCartMob(){const m=db.mobiles.find(x=>x.id===val('c_mob'));if(!m)return alert('Mobile chunein');if(cart.some(c=>c.mobId===m.id))return;cart.push({mobId:m.id,name:m.model+' ('+m.imei+')',qty:1,price:m.price,cost:m.cost||0});views.sale()}
+function finishSale(){
+  if(!cart.length)return alert('Bill khali hai');
+  const disc=num('c_disc');const sub=cart.reduce((a,c)=>a+c.price*c.qty,0);
+  const s={id:uid(),date:today(),items:cart,total:sub-disc,discount:disc,cost:cart.reduce((a,c)=>a+c.cost*c.qty,0),by:isOwner()?'Malik':'Staff',phone:val('c_ph')};
+  cart.forEach(c=>{if(c.accId){db.accessories.find(a=>a.id===c.accId).qty-=c.qty}if(c.mobId){const m=db.mobiles.find(x=>x.id===c.mobId);m.status='sold';m.soldTo='Cash sale'}});
+  db.sales.push(s);cart=[];save();views.sale();saleReceipt(s.id);
+}
+
+// Instalment sale
+views.qist=()=>{
+  const mob=db.mobiles.filter(m=>m.status==='stock').map(m=>`<option value="${m.id}">${esc(m.model)} · ${esc(m.imei)} - ${rs(m.price)}</option>`).join('');
+  const custs=db.customers.map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.phone)}</option>`).join('');
+  $('main').innerHTML=`<div class="card"><h2>Mobile qist par dein</h2>
+   <label>Customer</label><select id="q_c" onchange="$('newc').style.display=this.value?'none':'block'"><option value="">+ Naya customer</option>${custs}</select>
+   <div id="newc">${custForm('q')}</div>
+   <h3>Mobile</h3><select id="q_m" onchange="qFill()"><option value="">-- stock se chunein --</option>${mob}</select>
+   <div class="row"><div><label>Cash qeemat</label><input id="q_cash" type="number" oninput="qCalc()"></div><div><label>Munafa %</label><input id="q_pct" type="number" value="${db.settings.defaultPercent}" oninput="qCalc()"></div></div>
+   <div class="row"><div><label>Advance</label><input id="q_adv" type="number" value="0" oninput="qCalc()"></div><div><label>Kitne mahine</label><input id="q_mon" type="number" value="6" oninput="qCalc()"></div></div>
+   <label>Pehli qist ki tareekh</label><input id="q_start" type="date" value="${addMonths(today(),1)}">
+   <div class="card" style="background:#f0fdfa;margin-top:10px" id="q_sum">Qeemat likhein</div>
+   <button class="btn full" onclick="saveQist()">Save karein</button></div>`;
+};
+function custForm(p){return`<label>Naam *</label><input id="${p}_name"><div class="row"><div><label>Phone *</label><input id="${p}_phone" inputmode="tel"></div><div><label>CNIC</label><input id="${p}_cnic" inputmode="numeric"></div></div><label>Pata</label><input id="${p}_addr">
+ <h3>Guarantor (zamin)</h3><label>Naam</label><input id="${p}_gname"><div class="row"><div><label>Phone</label><input id="${p}_gphone" inputmode="tel"></div><div><label>CNIC</label><input id="${p}_gcnic" inputmode="numeric"></div></div>`}
+function readCust(p){return{id:uid(),name:val(p+'_name'),phone:val(p+'_phone'),cnic:val(p+'_cnic'),address:val(p+'_addr'),gName:val(p+'_gname'),gPhone:val(p+'_gphone'),gCnic:val(p+'_gcnic'),created:today()}}
+function qFill(){const m=db.mobiles.find(x=>x.id===val('q_m'));if(m){$('q_cash').value=m.price}qCalc()}
+function qCalc(){const cash=num('q_cash'),pct=num('q_pct'),adv=num('q_adv'),mon=Math.max(1,num('q_mon'));if(!cash){$('q_sum').textContent='Qeemat likhein';return}
+ const total=Math.round(cash*(1+pct/100));const rest=total-adv;const per=Math.ceil(rest/mon/10)*10;
+ $('q_sum').innerHTML=`Qist wali kul qeemat: <b>${rs(total)}</b><br>Advance ke baad baqi: <b>${rs(rest)}</b><br>Har mahine qist: <b>${rs(per)}</b> x ${mon}`}
+function saveQist(){
+  let cid=val('q_c');
+  if(!cid){const c=readCust('q');if(!c.name||!c.phone)return alert('Customer ka naam aur phone zaroori hai');db.customers.push(c);cid=c.id}
+  const cash=num('q_cash'),pct=num('q_pct'),adv=num('q_adv'),mon=Math.max(1,num('q_mon'));
+  if(!cash)return alert('Cash qeemat likhein');
+  const m=db.mobiles.find(x=>x.id===val('q_m'));
+  const total=Math.round(cash*(1+pct/100));if(adv>=total)return alert('Advance kul qeemat se kam hona chahiye');
+  const p={id:uid(),customerId:cid,mobileId:m?.id||null,item:m?(m.model+' · IMEI '+m.imei):'Mobile',cashPrice:cash,percent:pct,total,advance:adv,months:mon,cost:m?.cost||0,date:today(),schedule:makeSchedule(total-adv,mon,val('q_start')||addMonths(today(),1)),payments:[],by:isOwner()?'Malik':'Staff'};
+  if(!m&&!confirm('Stock se mobile nahi chuna. Phir bhi save karein?'))return;
+  if(m){m.status='sold';m.soldTo=cust(cid).name}
+  db.plans.push(p);save();toast('Save ho gaya');
+  showReceipt(planReceipt(p,'Naya qist account'),cust(cid).phone);go('customers');
+}
+
+// Wasooli
+views.wasooli=()=>{
+  $('main').innerHTML=`<div class="card"><h2>Qist wasooli</h2><input id="w_s" placeholder="Naam, phone ya IMEI se dhoondein" oninput="wList()"><div id="w_l"></div></div>`;wList();
+};
+function wList(){const q=val('w_s').toLowerCase();const arr=db.plans.filter(p=>remaining(p)>0).filter(p=>{const c=cust(p.customerId);return!q||(c?.name+' '+c?.phone+' '+p.item).toLowerCase().includes(q)});
+ $('w_l').innerHTML=arr.map(p=>{const c=cust(p.customerId),st=status(p);return`<div class="item"><div><b>${esc(c?.name)}</b> <span class="tag ${st.c}">${st.t}</span><br><span class="muted">${esc(p.item)} · baqi ${rs(remaining(p))}</span></div><button class="btn sm" onclick="openPay('${p.id}')">Wasool</button></div>`}).join('')||'<p class="muted">Koi active qist nahi</p>'}
+function openPay(pid){
+  const p=db.plans.find(x=>x.id===pid),c=cust(p.customerId),nx=nextDue(p),st=status(p);
+  const sugg=st.lateAmt?st.lateAmt:(nx.amount-nx.paid);
+  $('sheet').innerHTML=`<h2>${esc(c.name)} — qist wasooli</h2><p class="muted">${esc(p.item)}<br>Baqi kul: <b>${rs(remaining(p))}</b> · ${st.t}</p>
+  <label>Raqam</label><input id="p_amt" type="number" value="${sugg}">
+  <label>Late jurmana (optional)</label><input id="p_fine" type="number" value="${st.c==='late'&&db.settings.defaultFine?db.settings.defaultFine:0}">
+  <label>Note</label><input id="p_note">
+  <button class="btn full" onclick="doPay('${pid}')">Wasool karein</button><button class="btn sec full" onclick="closeM()">Wapas</button>`;
+  $('modal').classList.add('show');
+}
+function doPay(pid){
+  const p=db.plans.find(x=>x.id===pid);const amt=num('p_amt'),fine=num('p_fine');
+  if(amt<=0&&fine<=0)return alert('Raqam likhein');if(amt>remaining(p))return alert('Raqam baqi se zyada hai ('+rs(remaining(p))+')');
+  applyPayment(p,amt);const pay={id:uid(),date:today(),amount:amt,fine,note:val('p_note'),by:isOwner()?'Malik':'Staff'};p.payments.push(pay);save();
+  closeM();toast('Wasool ho gaya');showReceipt(payReceipt(p,pay),cust(p.customerId).phone);render();
+}
+
+// Customers
+views.customers=()=>{
+  $('main').innerHTML=`<div class="card"><h2>Customers</h2><input id="cs" placeholder="Dhoondein" oninput="cList()"><div id="cl"></div></div>`;cList();
+};
+function cList(){const q=val('cs').toLowerCase();$('cl').innerHTML=db.customers.filter(c=>!q||(c.name+' '+c.phone+' '+c.cnic).toLowerCase().includes(q)).map(c=>{const ps=db.plans.filter(p=>p.customerId===c.id);const rem=ps.reduce((a,p)=>a+remaining(p),0);return`<div class="item" onclick="custDetail('${c.id}')"><div><b>${esc(c.name)}</b><br><span class="muted">${esc(c.phone)} · ${ps.length} account</span></div><b>${rem?rs(rem):'<span class="tag ok">Saaf</span>'}</b></div>`}).join('')||'<p class="muted">Koi customer nahi</p>'}
+function custDetail(cid){
+  const c=cust(cid);const ps=db.plans.filter(p=>p.customerId===cid);
+  $('sheet').innerHTML=`<h2>${esc(c.name)}</h2><p class="muted">Phone: ${esc(c.phone)}<br>CNIC: ${esc(c.cnic)}<br>Pata: ${esc(c.address)}<br>Zamin: ${esc(c.gName)} ${esc(c.gPhone)} ${esc(c.gCnic)}</p>
+  ${ps.map(p=>{const st=status(p);return`<div class="card" style="border:1px solid #e2e8f0"><b>${esc(p.item)}</b> <span class="tag ${st.c}">${st.t}</span>${p.old?' <span class="tag">Purana record</span>':''}
+   <p class="muted">Kul: ${rs(p.total)} · Ada: ${rs(paidTotal(p))} · Baqi: <b>${rs(remaining(p))}</b>${isOwner()&&!p.old?'<br>Cash: '+rs(p.cashPrice)+' · '+p.percent+'%'+(p.cost?' · Munafa: '+rs(p.total-p.cost):''):''}</p>
+   <table><tr><th>#</th><th>Tareekh</th><th>Qist</th><th>Ada</th></tr>${p.schedule.map(s=>`<tr style="${s.paid<s.amount&&s.due<today()?'color:#dc2626':''}"><td>${s.no}</td><td>${fmtD(s.due)}</td><td>${rs(s.amount)}</td><td>${s.paid>=s.amount?'✔':rs(s.paid)}</td></tr>`).join('')}</table>
+   <h3>Wasooliyan</h3>${p.payments.map(x=>`<div class="item"><span>${fmtD(x.date)} · ${rs(x.amount)}${x.fine?' + jurmana '+rs(x.fine):''} <span class="muted">${esc(x.by)}</span></span><span><button class="btn sec sm" onclick="showReceipt(payReceipt(db.plans.find(q=>q.id==='${p.id}'),db.plans.find(q=>q.id==='${p.id}').payments.find(y=>y.id==='${x.id}')),'${esc(c.phone)}')">Receipt</button>${isOwner()?`<button class="btn red sm" onclick="delPay('${p.id}','${x.id}')">x</button>`:''}</span></div>`).join('')||'<p class="muted">Abhi koi nahi</p>'}
+   ${remaining(p)>0?`<button class="btn" onclick="openPay('${p.id}')">Qist wasool</button>`:''}<button class="btn sec" onclick="showReceipt(planReceipt(db.plans.find(q=>q.id==='${p.id}'),'Account statement'),'${esc(c.phone)}')">Statement</button>${isOwner()?`<button class="btn red" onclick="delPlan('${p.id}')">Account delete</button>`:''}</div>`}).join('')}
+  <a class="btn wa" href="tel:${esc(c.phone)}">Call</a>${isOwner()?`<button class="btn red" onclick="delCust('${cid}')">Customer delete</button>`:''}<button class="btn sec full" onclick="closeM()">Band karein</button>`;
+  $('modal').classList.add('show');
+}
+function rebuild(p){p.schedule.forEach(s=>s.paid=0);applyPayment(p,p.payments.reduce((a,x)=>a+x.amount,0)+(p.openingInSchedule||0))}
+function delPay(pid,xid){if(!confirm('Ye wasooli delete karein?'))return;const p=db.plans.find(x=>x.id===pid);p.payments=p.payments.filter(x=>x.id!==xid);rebuild(p);save();custDetail(p.customerId)}
+function delPlan(pid){if(!confirm('Poora account delete? Wapas nahi aaye ga'))return;const p=db.plans.find(x=>x.id===pid);const m=db.mobiles.find(x=>x.id===p.mobileId);if(m&&confirm('Mobile wapas stock mein daalein?')){m.status='stock';delete m.soldTo}db.plans=db.plans.filter(x=>x.id!==pid);save();custDetail(p.customerId)}
+function delCust(cid){if(db.plans.some(p=>p.customerId===cid))return alert('Pehle is ke accounts delete karein');if(!confirm('Customer delete karein?'))return;db.customers=db.customers.filter(c=>c.id!==cid);save();closeM();render()}
+
+// Stock
+views.stock=()=>{
+  const o=isOwner();
+  $('main').innerHTML=`${o?`<div class="card"><h2>Accessory add karein</h2><label>Naam</label><input id="a_n" placeholder="Jaise: Type-C charger"><div class="row"><div><label>Tadaad</label><input id="a_q" type="number"></div><div><label>Khareed qeemat</label><input id="a_c" type="number"></div><div><label>Bechne ki qeemat</label><input id="a_p" type="number"></div></div><button class="btn" onclick="addAcc()">Add</button></div>
+  <div class="card"><h2>Mobile stock mein add</h2><div class="row"><div><label>Model</label><input id="m_m" placeholder="Jaise: Infinix Hot 40"></div><div><label>IMEI</label><input id="m_i" inputmode="numeric"></div></div><div class="row"><div><label>Khareed qeemat</label><input id="m_c" type="number"></div><div><label>Cash qeemat</label><input id="m_p" type="number"></div></div><button class="btn" onclick="addMob()">Add</button></div>`:''}
+  <div class="card"><h2>Accessories</h2>${db.accessories.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><br><span class="muted">${rs(a.price)}${o?' · khareed '+rs(a.cost):''}</span></div><div><span class="tag ${a.qty<=3?'late':''}">${a.qty}</span>${o?` <button class="btn sec sm" onclick="editAcc('${a.id}')">+/-</button><button class="btn red sm" onclick="delAcc('${a.id}')">x</button>`:''}</div></div>`).join('')||'<p class="muted">Khali</p>'}</div>
+  <div class="card"><h2>Mobiles (stock mein)</h2>${db.mobiles.filter(m=>m.status==='stock').map(m=>`<div class="item"><div><b>${esc(m.model)}</b><br><span class="muted">IMEI ${esc(m.imei)} · ${rs(m.price)}${o?' · khareed '+rs(m.cost):''}</span></div>${o?`<button class="btn red sm" onclick="delMob('${m.id}')">x</button>`:''}</div>`).join('')||'<p class="muted">Khali</p>'}
+  <h3>Bik chuke</h3>${db.mobiles.filter(m=>m.status==='sold').slice(-20).reverse().map(m=>`<div class="item muted">${esc(m.model)} · ${esc(m.imei)} → ${esc(m.soldTo)}</div>`).join('')||'<p class="muted">Koi nahi</p>'}</div>`;
+};
+function addAcc(){if(!val('a_n'))return alert('Naam likhein');const ex=db.accessories.find(a=>a.name.toLowerCase()===val('a_n').toLowerCase());if(ex){ex.qty+=num('a_q');if(num('a_c'))ex.cost=num('a_c');if(num('a_p'))ex.price=num('a_p')}else db.accessories.push({id:uid(),name:val('a_n'),qty:num('a_q'),cost:num('a_c'),price:num('a_p')});save();toast('Add ho gaya');views.stock()}
+function editAcc(id){const a=db.accessories.find(x=>x.id===id);const n=prompt(a.name+' — kitne add karein? (kam karne ke liye minus likhein, jaise -2)','');if(n===null)return;a.qty=Math.max(0,a.qty+(parseInt(n)||0));save();views.stock()}
+function delAcc(id){if(confirm('Delete karein?')){db.accessories=db.accessories.filter(a=>a.id!==id);save();views.stock()}}
+function addMob(){if(!val('m_m')||!val('m_i'))return alert('Model aur IMEI zaroori hain');if(db.mobiles.some(m=>m.imei===val('m_i')))return alert('Ye IMEI pehle se hai');db.mobiles.push({id:uid(),model:val('m_m'),imei:val('m_i'),cost:num('m_c'),price:num('m_p'),status:'stock',added:today()});save();toast('Add ho gaya');views.stock()}
+function delMob(id){if(confirm('Delete karein?')){db.mobiles=db.mobiles.filter(m=>m.id!==id);save();views.stock()}}
+
+// Reports (owner)
+views.reports=()=>{
+  const ym=val('r_m')||today().slice(0,7);
+  const inM=d=>d&&d.startsWith(ym);
+  const sales=db.sales.filter(s=>inM(s.date));const saleTot=sales.reduce((a,s)=>a+s.total,0),saleProfit=sales.reduce((a,s)=>a+s.total-s.cost,0);
+  const newPlans=db.plans.filter(p=>!p.old&&inM(p.date));const planProfit=newPlans.reduce((a,p)=>a+(p.cost?p.total-p.cost:0),0);
+  let coll=0,fines=0,adv=newPlans.reduce((a,p)=>a+p.advance,0);db.plans.forEach(p=>p.payments.filter(x=>inM(x.date)).forEach(x=>{coll+=x.amount;fines+=x.fine||0}));
+  const out=db.plans.reduce((a,p)=>a+remaining(p),0);const lateAmt=db.plans.reduce((a,p)=>a+(status(p).lateAmt||0),0);
+  const stockVal=db.accessories.reduce((a,x)=>a+x.qty*x.cost,0)+db.mobiles.filter(m=>m.status==='stock').reduce((a,m)=>a+m.cost,0);
+  $('main').innerHTML=`<div class="card"><h2>Report</h2><label>Mahina</label><input id="r_m" type="month" value="${ym}" onchange="views.reports()">
+  <div class="stats" style="margin-top:10px">
+   <div class="stat"><span>Cash sale</span><b>${rs(saleTot)}</b></div><div class="stat"><span>Cash sale munafa</span><b>${rs(saleProfit)}</b></div>
+   <div class="stat"><span>Naye qist account</span><b>${newPlans.length}</b></div><div class="stat"><span>Qist munafa (naye accounts)</span><b>${rs(planProfit)}</b></div>
+   <div class="stat"><span>Advance mila</span><b>${rs(adv)}</b></div><div class="stat"><span>Qist wasooli</span><b>${rs(coll)}</b></div>
+   <div class="stat"><span>Jurmana mila</span><b>${rs(fines)}</b></div><div class="stat"><span>Kul munafa</span><b style="color:#0f766e">${rs(saleProfit+planProfit+fines)}</b></div></div></div>
+  <div class="card"><h2>Abhi tak</h2><div class="stats"><div class="stat"><span>Bazaar mein paisa (baqi qistain)</span><b>${rs(out)}</b></div><div class="stat"><span>Late raqam</span><b style="color:#dc2626">${rs(lateAmt)}</b></div><div class="stat"><span>Stock ki qeemat (khareed)</span><b>${rs(stockVal)}</b></div><div class="stat"><span>Active accounts</span><b>${db.plans.filter(p=>remaining(p)>0).length}</b></div></div></div>`;
+};
+
+// Old record (owner)
+views.old=()=>{
+  const custs=db.customers.map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.phone)}</option>`).join('');
+  $('main').innerHTML=`<div class="card"><h2>Purane customer ka record daalein</h2><p class="muted">Jo qist pehle se chal rahi hai, us ka baqi hisaab yahan daalein.</p>
+  <label>Customer</label><select id="o_c" onchange="$('o_new').style.display=this.value?'none':'block'"><option value="">+ Naya customer</option>${custs}</select><div id="o_new">${custForm('o')}</div>
+  <label>Cheez (mobile model / IMEI)</label><input id="o_item">
+  <div class="row"><div><label>Kul qeemat (qist wali)</label><input id="o_tot" type="number"></div><div><label>Ab tak kitna ada kiya</label><input id="o_paid" type="number"></div></div>
+  <div class="row"><div><label>Baqi kitni qistain</label><input id="o_n" type="number"></div><div><label>Agli qist ki tareekh</label><input id="o_d" type="date" value="${today()}"></div></div>
+  <div class="card" style="background:#f0fdfa;margin-top:10px" id="o_sum"></div>
+  <button class="btn full" onclick="saveOld()">Save karein</button></div>`;
+  ['o_tot','o_paid','o_n'].forEach(i=>$(i).oninput=oCalc);
+};
+function oCalc(){const r=num('o_tot')-num('o_paid'),n=Math.max(1,num('o_n'));$('o_sum').innerHTML=r>0?`Baqi: <b>${rs(r)}</b> · Har qist takreeban <b>${rs(Math.ceil(r/n/10)*10)}</b>`:''}
+function saveOld(){
+  const tot=num('o_tot'),paid=num('o_paid'),n=Math.max(1,num('o_n'));if(!tot||paid>=tot)return alert('Kul qeemat aur ada ki gayi raqam theek likhein');
+  let cid=val('o_c');if(!cid){const c=readCust('o');if(!c.name||!c.phone)return alert('Naam aur phone zaroori hai');db.customers.push(c);cid=c.id}
+  db.plans.push({id:uid(),customerId:cid,mobileId:null,item:val('o_item')||'Mobile',cashPrice:0,percent:0,total:tot,advance:0,openingPaid:paid,months:n,cost:0,date:today(),old:true,schedule:makeSchedule(tot-paid,n,val('o_d')||today()),payments:[],by:'Malik'});
+  save();toast('Purana record save ho gaya');go('customers');
+}
+
+// Settings (owner)
+views.settings=()=>{
+  const s=db.settings;
+  $('main').innerHTML=`<div class="card"><h2>Dukaan ki maloomat</h2><label>Naam</label><input id="st_shop" value="${esc(s.shop)}"><label>Phone</label><input id="st_ph" value="${esc(s.phone)}"><label>Pata</label><input id="st_ad" value="${esc(s.address)}">
+  <div class="row"><div><label>Default munafa %</label><input id="st_pct" type="number" value="${s.defaultPercent}"></div><div><label>Default late jurmana (0 = nahi)</label><input id="st_fine" type="number" value="${s.defaultFine}"></div></div>
+  <div class="row"><div><label>Naya Malik PIN</label><input id="st_op" type="password" placeholder="khali = wahi"></div><div><label>Naya Staff PIN</label><input id="st_sp" type="password" placeholder="khali = wahi"></div></div>
+  <button class="btn" onclick="saveSet()">Save</button></div>
+  <div class="card"><h2>Backup</h2><p class="muted">Data abhi isi phone mein hai. Backup file WhatsApp/Drive par save kar lein.</p><button class="btn" onclick="backup()">Backup download</button><label class="btn sec">Backup wapas laayein<input type="file" accept=".json" style="display:none" onchange="restore(this)"></label></div>`;
+};
+function saveSet(){const s=db.settings;s.shop=val('st_shop')||s.shop;s.phone=val('st_ph');s.address=val('st_ad');s.defaultPercent=num('st_pct');s.defaultFine=num('st_fine');
+ const op=val('st_op')||s.ownerPin,sp=val('st_sp')||s.staffPin;if(op===sp)return alert('Dono PIN alag rakhein');s.ownerPin=op;s.staffPin=sp;save();toast('Save ho gaya');render()}
+function backup(){const b=new Blob([JSON.stringify(db)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='mobile-shop-backup-'+today()+'.json';a.click()}
+function restore(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.settings)throw 0;if(!confirm('Abhi ka data is backup se badal jaye ga. Theek?'))return;db=d;save();toast('Backup aa gaya');render()}catch(e){alert('File theek nahi')}};r.readAsText(f)}
+
+// ---------- Receipts ----------
+function head(){const s=db.settings;return`${s.shop}\n${s.address||''}${s.phone?'\nPh: '+s.phone:''}\n--------------------------------\n`}
+function payReceipt(p,x){const c=cust(p.customerId);return head()+`QIST RECEIPT\nTareekh: ${fmtD(x.date)}\nCustomer: ${c.name}\nPhone: ${c.phone}\nCheez: ${p.item}\n--------------------------------\nQist ada: ${rs(x.amount)}${x.fine?'\nLate jurmana: '+rs(x.fine):''}\nKul ada (is dafa): ${rs(x.amount+(x.fine||0))}\n--------------------------------\nAb tak ada: ${rs(paidTotal(p))}\nBaqi: ${rs(remaining(p))}${nextDue(p)?'\nAgli qist: '+fmtD(nextDue(p).due)+' - '+rs(nextDue(p).amount-nextDue(p).paid):'\nAccount MUKAMMAL'}\n\nShukriya!`}
+function planReceipt(p,title){const c=cust(p.customerId);return head()+`${title.toUpperCase()}\nTareekh: ${fmtD(today())}\nCustomer: ${c.name}\nPhone: ${c.phone}\nCheez: ${p.item}\n--------------------------------\nKul qeemat: ${rs(p.total)}\n${p.old?'Pehle ada: '+rs(p.openingPaid):'Advance: '+rs(p.advance)}\nAb tak ada: ${rs(paidTotal(p))}\nBaqi: ${rs(remaining(p))}\n--------------------------------\n${p.schedule.map(s=>`${String(s.no).padStart(2)}. ${fmtD(s.due)}  ${rs(s.amount)}  ${s.paid>=s.amount?'ADA':''}`).join('\n')}\n\nShukriya!`}
+function saleReceipt(id){const s=db.sales.find(x=>x.id===id);showReceipt(head()+`CASH BILL\nTareekh: ${fmtD(s.date)}\n--------------------------------\n${s.items.map(i=>`${i.name}\n  ${i.qty} x ${rs(i.price)} = ${rs(i.qty*i.price)}`).join('\n')}\n--------------------------------${s.discount?'\nDiscount: '+rs(s.discount):''}\nKUL: ${rs(s.total)}\n\nShukriya!`,s.phone)}
+function waNum(p){p=(p||'').replace(/\D/g,'');if(p.startsWith('0'))p='92'+p.slice(1);return p}
+function showReceipt(text,phone){
+  $('sheet').innerHTML=`<div id="receipt">${esc(text)}</div>
+  <label>WhatsApp number</label><input id="wa_n" inputmode="tel" value="${esc(phone||'')}">
+  <button class="btn" onclick="window.print()">Print</button><button class="btn wa" onclick="sendWa()">WhatsApp</button><button class="btn sec" onclick="closeM()">Band karein</button>`;
+  window._rt=text;$('modal').classList.add('show');
+}
+function sendWa(){const n=waNum(val('wa_n'));window.open('https://wa.me/'+n+'?text='+encodeURIComponent(window._rt),'_blank')}
+function closeM(){$('modal').classList.remove('show')}
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeM()});
+render();
+</script>
+</body>
+</html>

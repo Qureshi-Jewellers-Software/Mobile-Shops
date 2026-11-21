@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mobile Shop & Qistain</title>
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#2f6db5">
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f1f5f9;color:#0f172a;font-size:16px}
-header{background:#0f766e;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header{background:#2f6db5;color:#fff;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
 header b{font-size:18px}
 header small{opacity:.85}
 nav{display:flex;overflow-x:auto;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:52px;z-index:4}
 nav button{flex:0 0 auto;border:0;background:none;padding:12px 14px;font-size:15px;color:#475569;border-bottom:3px solid transparent}
-nav button.on{color:#0f766e;border-color:#0f766e;font-weight:600}
+nav button.on{color:#2f6db5;border-color:#2f6db5;font-weight:600}
 main{padding:12px;max-width:760px;margin:auto}
 .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px #0001}
 h2{font-size:17px;margin:0 0 10px}
@@ -21,13 +21,13 @@ h3{font-size:15px;margin:12px 0 6px;color:#334155}
 label{display:block;font-size:13px;color:#475569;margin:8px 0 3px}
 input,select,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;background:#fff}
 .row{display:flex;gap:8px}.row>*{flex:1}
-.btn{display:inline-block;border:0;border-radius:8px;padding:11px 14px;font-size:15px;background:#0f766e;color:#fff;margin:4px 4px 0 0;cursor:pointer}
+.btn{display:inline-block;border:0;border-radius:8px;padding:11px 14px;font-size:15px;background:#2f6db5;color:#fff;margin:4px 4px 0 0;cursor:pointer}
 .btn.sec{background:#e2e8f0;color:#0f172a}.btn.red{background:#dc2626}.btn.wa{background:#16a34a}.btn.sm{padding:6px 10px;font-size:13px}
 .full{width:100%}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat{background:#f8fafc;border-radius:10px;padding:10px}
 .stat span{display:block;font-size:12px;color:#64748b}.stat b{font-size:18px}
-.statbtn{border:1px solid #cbd5e1;text-align:left;font:inherit;color:inherit;cursor:pointer;box-shadow:0 1px 2px #0001}.statbtn:active{background:#e2e8f0}.statbtn i{display:block;font-style:normal;font-size:12px;color:#0f766e;margin-top:2px}
+.statbtn{background:#2f6db5;border:0;text-align:left;font:inherit;color:inherit;cursor:pointer;box-shadow:0 1px 2px #0001}.statbtn:active{background:#265b98}.statbtn span{color:#dbe7f7!important}.statbtn b{color:#fff!important;font-size:22px}.statbtn i{display:block;font-style:normal;font-size:12px;color:#dbe7f7;margin-top:2px}.stats .statbtn{padding:14px 12px}
 .item{border-top:1px solid #e2e8f0;padding:10px 0;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .item:first-child{border-top:0}
 .muted{color:#64748b;font-size:13px}
@@ -144,7 +144,7 @@ function doLogin(){const p=val('pin');if(p===db.settings.ownerPin)setRole('owner
 
 // ---------- Views ----------
 const views={};
-function planRow(p){const c=cust(p.customerId),st=status(p),nx=nextDue(p);return`<div class="item"><div onclick="custDetail('${c.id}')" style="cursor:pointer;flex:1"><b>${esc(c?.name)}</b> <span class="tag ${st.c}">${st.t}</span><br><span class="muted">${esc(p.item)} · ${esc(c?.phone)}${st.lateAmt?' · baqi '+rs(st.lateAmt)+(st.days?' · '+st.days+' din':''):' · qist '+rs(nx?.amount-nx?.paid)}</span><br><span class="muted" style="color:#0f766e">Poori history ›</span></div><div><button class="btn wa sm" onclick="remind('${p.id}')">WhatsApp</button><button class="btn sm" onclick="openPay('${p.id}')">Wasool</button></div></div>`}
+function planRow(p){const c=cust(p.customerId),st=status(p),nx=nextDue(p);return`<div class="item"><div onclick="custDetail('${c.id}')" style="cursor:pointer;flex:1"><b>${esc(c?.name)}</b> <span class="tag ${st.c}">${st.t}</span><br><span class="muted">${esc(p.item)} · ${esc(c?.phone)}${st.lateAmt?' · baqi '+rs(st.lateAmt)+(st.days?' · '+st.days+' din':''):' · qist '+rs(nx?.amount-nx?.paid)}</span><br><span class="muted" style="color:#2f6db5">Poori history ›</span></div><div><button class="btn wa sm" onclick="remind('${p.id}')">WhatsApp</button><button class="btn sm" onclick="openPay('${p.id}')">Wasool</button></div></div>`}
 function homeData(){const t=today();const active=db.plans.filter(p=>remaining(p)>0);
  return{t,late:active.filter(p=>status(p).c==='late').sort((a,b)=>status(b).days-status(a).days),due:active.filter(p=>status(p).c==='due'),
   pays:db.plans.flatMap(p=>p.payments.filter(x=>x.date===t).map(x=>({p,x}))),sales:db.sales.filter(s=>s.date===t)}}
@@ -153,14 +153,12 @@ views.home=()=>{
   const coll=h.pays.reduce((a,o)=>a+o.x.amount+(o.x.fine||0),0),sale=h.sales.reduce((a,s)=>a+s.total,0);
   const box=(k,label,v,col)=>`<button class="stat statbtn" onclick="homeOpen('${k}')"><span>${label}</span><b${col?` style="color:${col}"`:''}>${v}</b><i>Dekhein ›</i></button>`;
   $('main').innerHTML=`<div class="card"><div class="stats">
-   ${box('coll','Aaj ki wasooli',rs(coll))}${box('sale','Aaj ki cash sale',rs(sale))}${box('due','Aaj due',h.due.length,'#b45309')}${box('late','Late customers',h.late.length,'#dc2626')}</div></div>
-   <div class="card"><h2>Aaj due qistain</h2>${h.due.map(planRow).join('')||'<p class="muted">Koi nahi</p>'}</div>
-   <div class="card"><h2>Late qistain</h2>${h.late.map(planRow).join('')||'<p class="muted">Koi nahi</p>'}</div>`;
+   ${box('coll','Aaj ki wasooli',rs(coll))}${box('sale','Aaj ki cash sale',rs(sale))}${box('due','Aaj due',h.due.length)}${box('late','Late customers',h.late.length)}</div></div>`;
 };
 function homeOpen(k){const h=homeData();let title='',body='';
  if(k==='due'){title='Aaj due qistain';body=h.due.map(planRow).join('')}
  if(k==='late'){title='Late customers';body=h.late.map(planRow).join('')}
- if(k==='coll'){title='Aaj ki wasooli';body=h.pays.map(({p,x})=>{const c=cust(p.customerId);return`<div class="item"><div onclick="custDetail('${c.id}')" style="cursor:pointer;flex:1"><b>${esc(c.name)}</b><br><span class="muted">${esc(p.item)} · ${esc(x.by)}${x.fine?' · jurmana '+rs(x.fine):''}</span><br><span class="muted" style="color:#0f766e">Poori history ›</span></div><div><b>${rs(x.amount)}</b><br><button class="btn sec sm" onclick="showReceipt(payReceipt(db.plans.find(q=>q.id==='${p.id}'),db.plans.find(q=>q.id==='${p.id}').payments.find(y=>y.id==='${x.id}')),'${esc(c.phone)}')">Receipt</button></div></div>`}).join('');
+ if(k==='coll'){title='Aaj ki wasooli';body=h.pays.map(({p,x})=>{const c=cust(p.customerId);return`<div class="item"><div onclick="custDetail('${c.id}')" style="cursor:pointer;flex:1"><b>${esc(c.name)}</b><br><span class="muted">${esc(p.item)} · ${esc(x.by)}${x.fine?' · jurmana '+rs(x.fine):''}</span><br><span class="muted" style="color:#2f6db5">Poori history ›</span></div><div><b>${rs(x.amount)}</b><br><button class="btn sec sm" onclick="showReceipt(payReceipt(db.plans.find(q=>q.id==='${p.id}'),db.plans.find(q=>q.id==='${p.id}').payments.find(y=>y.id==='${x.id}')),'${esc(c.phone)}')">Receipt</button></div></div>`}).join('');
   body+=h.pays.length?`<h3>Kul: ${rs(h.pays.reduce((a,o)=>a+o.x.amount+(o.x.fine||0),0))}</h3>`:''}
  if(k==='sale'){title='Aaj ki cash sale';body=h.sales.slice().reverse().map(s=>`<div class="item"><div>${s.items.map(i=>esc(i.name)+' x'+i.qty).join(', ')}<br><span class="muted">${esc(s.by)}${s.discount?' · discount '+rs(s.discount):''}</span></div><div><b>${rs(s.total)}</b><br><button class="btn sec sm" onclick="saleReceipt('${s.id}')">Receipt</button></div></div>`).join('');
   body+=h.sales.length?`<h3>Kul: ${rs(h.sales.reduce((a,s)=>a+s.total,0))}</h3>`:''}
@@ -204,7 +202,7 @@ views.qist=()=>{
    <div class="row"><div><label>Cash qeemat</label><input id="q_cash" type="number" oninput="qCalc()"></div><div><label>Munafa %</label><input id="q_pct" type="number" value="${db.settings.defaultPercent}" oninput="qCalc()"></div></div>
    <div class="row"><div><label>Advance</label><input id="q_adv" type="number" value="0" oninput="qCalc()"></div><div><label>Kitne mahine</label><input id="q_mon" type="number" value="6" oninput="qCalc()"></div></div>
    <label>Pehli qist ki tareekh</label><input id="q_start" type="date" value="${addMonths(today(),1)}">
-   <div class="card" style="background:#f0fdfa;margin-top:10px" id="q_sum">Qeemat likhein</div>
+   <div class="card" style="background:#eaf2fc;margin-top:10px" id="q_sum">Qeemat likhein</div>
    <button class="btn full" onclick="saveQist()">Save karein</button></div>`;
 };
 function custForm(p){return`<label>Naam *</label><input id="${p}_name"><div class="row"><div><label>Phone *</label><input id="${p}_phone" inputmode="tel"></div><div><label>CNIC</label><input id="${p}_cnic" inputmode="numeric"></div></div><label>Pata</label><input id="${p}_addr">
@@ -327,7 +325,7 @@ views.reports=()=>{
    <div class="stat"><span>Cash sale</span><b>${rs(saleTot)}</b></div><div class="stat"><span>Cash sale munafa</span><b>${rs(saleProfit)}</b></div>
    <div class="stat"><span>Naye qist account</span><b>${newPlans.length}</b></div><div class="stat"><span>Qist munafa (naye accounts)</span><b>${rs(planProfit)}</b></div>
    <div class="stat"><span>Advance mila</span><b>${rs(adv)}</b></div><div class="stat"><span>Qist wasooli</span><b>${rs(coll)}</b></div>
-   <div class="stat"><span>Jurmana mila</span><b>${rs(fines)}</b></div><div class="stat"><span>Kul munafa</span><b style="color:#0f766e">${rs(saleProfit+planProfit+fines)}</b></div></div></div>
+   <div class="stat"><span>Jurmana mila</span><b>${rs(fines)}</b></div><div class="stat"><span>Kul munafa</span><b style="color:#2f6db5">${rs(saleProfit+planProfit+fines)}</b></div></div></div>
   <div class="card"><h2>Abhi tak</h2><div class="stats"><div class="stat"><span>Bazaar mein paisa (baqi qistain)</span><b>${rs(out)}</b></div><div class="stat"><span>Late raqam</span><b style="color:#dc2626">${rs(lateAmt)}</b></div><div class="stat"><span>Stock ki qeemat (khareed)</span><b>${rs(stockVal)}</b></div><div class="stat"><span>Active accounts</span><b>${db.plans.filter(p=>remaining(p)>0).length}</b></div></div></div>`;
 };
 
@@ -339,7 +337,7 @@ views.old=()=>{
   <label>Cheez (mobile model / IMEI)</label><input id="o_item">
   <div class="row"><div><label>Kul qeemat (qist wali)</label><input id="o_tot" type="number"></div><div><label>Ab tak kitna ada kiya</label><input id="o_paid" type="number"></div></div>
   <div class="row"><div><label>Baqi kitni qistain</label><input id="o_n" type="number"></div><div><label>Agli qist ki tareekh</label><input id="o_d" type="date" value="${today()}"></div></div>
-  <div class="card" style="background:#f0fdfa;margin-top:10px" id="o_sum"></div>
+  <div class="card" style="background:#eaf2fc;margin-top:10px" id="o_sum"></div>
   <button class="btn full" onclick="saveOld()">Save karein</button></div>`;
   ['o_tot','o_paid','o_n'].forEach(i=>$(i).oninput=oCalc);
 };

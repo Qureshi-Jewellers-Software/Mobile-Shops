@@ -52,7 +52,8 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:6px 4px;b
 // ---------- Data ----------
 const KEY='mobileShopDB_v1';
 let db=load();if(db&&!db.models)db.models={};
-let role=null, tab='home';
+let role=null, tab='home';try{const r=localStorage.getItem('mobileShopRole');if(r==='owner'||r==='staff')role=r}catch(e){}
+function setRole(r){role=r;try{r?localStorage.setItem('mobileShopRole',r):localStorage.removeItem('mobileShopRole')}catch(e){}}
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){alert('Save nahi hua: '+e.message)}}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
@@ -113,7 +114,7 @@ function render(){
   (views[tab]||views.home)();
 }
 function go(t){tab=t;render();scrollTo(0,0)}
-function logout(){role=null;render()}
+function logout(){setRole(null);render()}
 function renderSetup(){
   $('app').innerHTML=`<div class="login card"><div style="text-align:right">${langBtn()}</div><h2>Pehli dafa setup</h2>
   <label>Dukaan ka naam</label><input id="s_shop" placeholder="Jaise: Ali Mobile Zone">
@@ -128,7 +129,7 @@ function doSetup(){
   if(val('s_op')===val('s_sp'))return alert('Malik aur Staff ka PIN alag rakhein');
   db={settings:{shop:val('s_shop'),phone:val('s_phone'),address:val('s_addr'),ownerPin:val('s_op'),staffPin:val('s_sp'),defaultPercent:20,defaultFine:0},
       accessories:[],mobiles:[],models:{},customers:[],plans:[],sales:[]};
-  save();role='owner';render();
+  save();setRole('owner');render();
 }
 function renderLogin(){
   $('app').innerHTML=`<div class="login card"><div style="text-align:right">${langBtn()}</div><h2>${esc(db.settings.shop)}</h2>
@@ -136,7 +137,7 @@ function renderLogin(){
   <button class="btn full" onclick="doLogin()">Login</button></div>`;
   setTimeout(()=>$('pin')?.focus(),50);
 }
-function doLogin(){const p=val('pin');if(p===db.settings.ownerPin)role='owner';else if(p===db.settings.staffPin)role='staff';else return alert('PIN ghalat hai');tab='home';render()}
+function doLogin(){const p=val('pin');if(p===db.settings.ownerPin)setRole('owner');else if(p===db.settings.staffPin)setRole('staff');else return alert('PIN ghalat hai');tab='home';render()}
 
 // ---------- Views ----------
 const views={};
